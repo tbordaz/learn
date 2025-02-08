@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM Role for Cross-Account S3 Copy
+
+Parameters:
+  IamRoleName:
+    Type: String
+    Description: IAM Role Name
+  DestinationAccountId:
+    Type: String
+    Description: AWS Account ID of the destination account
+  SourceBucketName:
+    Type: String
+    Description: Name of the source S3 bucket
+  DestinationBucketName:
+    Type: String
+    Description: Name of the destination S3 bucket
+  KMSKeyArnSource:
+    Type: String
+    Description: ARN of KMS key in source account
+  KMSKeyArnDestination:
+    Type: String
+    Description: ARN of KMS key in destination account
+
+Resources:
+  CrossAccountS3CopyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref IamRoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${DestinationAccountId}:root'
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CrossAccountS3CopyPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kms:Encrypt
+                  - kms:Decrypt
+                  - kms:GenerateDataKey
+                  - kms:DescribeKey
+                Resource:
+                  - !Ref KMSKeyArnSource
+                  - !Ref KMSKeyArnDestination
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${SourceBucketName}'
+                  - !Sub 'arn:aws:s3:::${SourceBucketName}/*'
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub 'arn:aws:s3:::${DestinationBucketName}'
+                  - !Sub 'arn:aws:s3:::${DestinationBucketName}/*'
+
+Outputs:
+  CrossAccountS3CopyRoleArn:
+    Value: !GetAtt CrossAccountS3CopyRole.Arn
+    Description: ARN of the Cross Account S3 copy role
+

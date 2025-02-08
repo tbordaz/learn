@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Secure S3 bucket with SSE-KMS encryption, TLS enforcement, bucket key optimisation, and cross-account access
+
+Parameters:
+  BucketNamePrefix:
+    Type: String
+    Description: Prefix for the S3 bucket name (must be lowercase)
+    AllowedPattern: "^[a-z0-9-]+$"
+    ConstraintDescription: "The bucket name prefix must only contain lowercase letters, numbers, and hyphens."
+  SourceAccountId:
+    Type: String
+    Description: AWS Account ID of the source account
+
+Resources:
+  S3KmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: Encryption key for S3 bucket
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: Allow use of the key by the source account
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${SourceAccountId}:root'
+            Action:
+              - kms:GenerateDataKey*
+              - kms:Encrypt
+            Resource: '*'
+
+  S3KmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub 'alias/${AWS::StackName}-s3-key'
+      TargetKeyId: !Ref S3KmsKey
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join 
+        - "-"
+        - - !Ref BucketNamePrefix
+          - !Ref "AWS::AccountId"
+          - !Ref "AWS::Region"
+          - !Ref "AWS::StackName"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref S3KmsKey
+            BucketKeyEnabled: true
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref S3Bucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: DenyUnencryptedTransport
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: 
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+            Condition:
+              Bool:
+                'aws:SecureTransport': 'false'
+          
+          - Sid: RequireTLS12OrHigher
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: 
+              - !Sub 'arn:aws:s3:::${S3Bucket}'
+              - !Sub 'arn:aws:s3:::${S3Bucket}/*'
+            Condition:
+              NumericLessThan:
+                's3:TlsVersion': 1.2
+
+Outputs:
+  BucketName:
+    Value: !Ref S3Bucket
+    Description: Name of the encrypted S3 bucket
+  KmsKeyArn:
+    Value: !GetAtt S3KmsKey.Arn
+    Description: ARN of the KMS encryption key
