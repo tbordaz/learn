@@ -13,18 +13,18 @@ aws sso login
 aws cloudformation deploy \
   --template-file s3-template.yaml \
   --stack-name sources3 \
-  --region $aws_region \
+  --region $AWS_REGION \
   --parameter-overrides BucketNamePrefix=mysourcebucket
 
 SOURCE_BUCKET_NAME=$(aws cloudformation describe-stacks \
     --stack-name sources3 \
-    --region $aws_region \
+    --region $AWS_REGION \
     --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
     --output text)
 
 SOURCE_BUCKET_KMS_KEY_ARN=$(aws cloudformation describe-stacks \
     --stack-name sources3 \
-    --region $aws_region \
+    --region $AWS_REGION \
     --query "Stacks[0].Outputs[?OutputKey=='KmsKeyArn'].OutputValue" \
     --output text)
 
@@ -40,18 +40,18 @@ aws sso login
 aws cloudformation deploy \
   --template-file s3-template.yaml \
   --stack-name destinations3 \
-  --region $aws_region \
+  --region $AWS_REGION \
   --parameter-overrides BucketNamePrefix=mydestinationbucket
 
 DEST_BUCKET_NAME=$(aws cloudformation describe-stacks \
     --stack-name destinations3 \
-    --region $aws_region \
+    --region $AWS_REGION \
     --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
     --output text)
 
 DEST_BUCKET_KMS_KEY_ARN=$(aws cloudformation describe-stacks \
     --stack-name destinations3 \
-    --region $aws_region \
+    --region $AWS_REGION \
     --query "Stacks[0].Outputs[?OutputKey=='KmsKeyArn'].OutputValue" \
     --output text)
 ```
@@ -125,7 +125,7 @@ aws sso login
 aws cloudformation deploy \
   --template-file iam-role-s3-cross-account-template.yaml \
   --stack-name crossAccountS3IamRole \
-  --region $aws_region \
+  --region $AWS_REGION \
   --parameter-overrides \
     IamRoleName=$CROSS_ACCOUNT_ROLE_NAME \
     DestinationAccountId=$AccountB_ID \
@@ -137,7 +137,7 @@ aws cloudformation deploy \
 
 CROSS_ACCOUNT_ROLE_ARN=$(aws cloudformation describe-stacks \
     --stack-name crossAccountS3IamRole \
-    --region $aws_region \
+    --region $AWS_REGION \
     --query "Stacks[0].Outputs[?OutputKey=='CrossAccountS3CopyRoleArn'].OutputValue" \
     --output text)
 
@@ -184,7 +184,7 @@ aws sso login
 aws cloudformation deploy \
   --template-file s3-source-template-updated-bucket-policy.yaml \
   --stack-name sources3 \
-  --region $aws_region \
+  --region $AWS_REGION \
   --parameter-overrides BucketNamePrefix=mysourcebucket CrossAccountRoleArn=$CROSS_ACCOUNT_ROLE_ARN \
   --capabilities CAPABILITY_NAMED_IAM
 ```
@@ -232,14 +232,14 @@ aws sso-admin delete-permission-set \
 export AWS_PROFILE=$DESTINATION_ACCOUNT
 aws sso login 
 
-aws cloudformation delete-stack --stack-name crossAccountS3IamRole --region $aws_region
+aws cloudformation delete-stack --stack-name crossAccountS3IamRole --region $AWS_REGION
 
 # delete s3 buckets
-aws cloudformation delete-stack --stack-name destinations3 --region $aws_region
+aws cloudformation delete-stack --stack-name destinations3 --region $AWS_REGION
 
 export AWS_PROFILE=$SOURCE_ACCOUNT
 aws sso login 
 aws s3 rm s3://$SOURCE_BUCKET_NAME --recursive
-aws cloudformation delete-stack --stack-name sources3 --region $aws_region
+aws cloudformation delete-stack --stack-name sources3 --region $AWS_REGION
 ```
 
