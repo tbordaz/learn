@@ -151,7 +151,7 @@ aws iam list-role-policies --role-name "$CROSS_ACCOUNT_ROLE_NAME"
 ``` bash
 export AWS_PROFILE=$DEST_CROSS_ACCOUNT
 aws sso login
-aws sts get-caller-identity
+
 # Assume the role
 CREDENTIALS=$(aws sts assume-role --role-arn "arn:aws:iam::${AccountB_ID}:role/${CROSS_ACCOUNT_ROLE_NAME}" --role-session-name CrossAccountCopy)
 
