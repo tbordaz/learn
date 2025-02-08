@@ -2,14 +2,14 @@
 
 ### references
 https://repost.aws/knowledge-center/s3-bucket-access-default-encryption
+https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/copy-data-from-an-s3-bucket-to-another-account-and-region-by-using-the-aws-cli.html
 https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/copy-data-from-s3-bucket-to-another-account-region-using-s3-batch-replication.html
 
 # create bucket
 
 ```bash
 export AWS_PROFILE=$SOURCE_ACCOUNT
-aws sso login # source bucket account
-
+aws sso login 
 aws cloudformation deploy \
   --template-file s3-template.yaml \
   --stack-name sources3 \
@@ -22,14 +22,20 @@ SOURCE_BUCKET_NAME=$(aws cloudformation describe-stacks \
     --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
     --output text)
 
+SOURCE_BUCKET_KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+    --stack-name sources3 \
+    --region ap-southeast-2 \
+    --query "Stacks[0].Outputs[?OutputKey=='KmsKeyArn'].OutputValue" \
+    --output text)
+
 python3 generate-sample-files.py 
 
 # upload sample files to source s3
 aws s3 cp sample_files/ "s3://$SOURCE_BUCKET_NAME/" --recursive
 
-####
+# Create destination bucket
 export AWS_PROFILE=$DESTINATION_ACCOUNT
-aws sso login # destination bucket account
+aws sso login
 
 aws cloudformation deploy \
   --template-file s3-template.yaml \
@@ -42,124 +48,198 @@ DEST_BUCKET_NAME=$(aws cloudformation describe-stacks \
     --region ap-southeast-2 \
     --query "Stacks[0].Outputs[?OutputKey=='BucketName'].OutputValue" \
     --output text)
-```
 
-# Create IAM Role for Cross Account Access
-# Source Account IAM Role
-``` bash
-export AWS_PROFILE=$SOURCE_ACCOUNT
-aws sso login # source bucket account
-
-# Configure these variables before execution
-ROLE_NAME="CrossAccountS3AccessRole"
-
-# Create IAM role with trust policy
-aws iam create-role \
-  --role-name "$ROLE_NAME" \
-  --assume-role-policy-document "$(cat <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "AWS": "arn:aws:iam::${AccountB_ID}:root"
-            },
-            "Action": "sts:AssumeRole"
-        }
-    ]
-}
-EOF
-)"
-
-aws iam put-role-policy \
-  --role-name "$ROLE_NAME" \
-  --policy-name "S3BucketAccessPolicy" \
-  --policy-document "$(cat <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "s3:GetObject",
-                "s3:ListBucket"
-            ],
-            "Resource": [
-                "arn:aws:s3:::${SOURCE_BUCKET_NAME}",
-                "arn:aws:s3:::${SOURCE_BUCKET_NAME}/*"
-            ]
-        }
-    ]
-}
-EOF
-)"
-
-# Check role properties
-aws iam get-role --role-name "$ROLE_NAME"
-
-# Verify attached policies
-aws iam list-role-policies --role-name "$ROLE_NAME"
-
+DEST_BUCKET_KMS_KEY_ARN=$(aws cloudformation describe-stacks \
+    --stack-name destinations3 \
+    --region ap-southeast-2 \
+    --query "Stacks[0].Outputs[?OutputKey=='KmsKeyArn'].OutputValue" \
+    --output text)
 ```
 
 # Create Identity Center Permissions
 ``` bash
-export AWS_PROFILE=$MASTER_ACCOUNT
-aws sso login # master account
+export AWS_PROFILE=$MANAGEMENT_ACCOUNT
+aws sso login
 
 # Configure these variables
 INSTANCE_ARN="arn:aws:sso:::instance/$ID_CENTER_INSTANCEID"
 PERMISSION_SET_NAME="CrossAccountS3WriteAccess"
+CROSS_ACCOUNT_ROLE_NAME="CrossAccountS3CopyRole"
 
-# Create JSON policy document
-POLICY_DOC=$(jq -n --arg bucket "$DEST_BUCKET_NAME" --arg account "$AccountA_ID" --arg rolename "$ROLE_NAME" '{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": ["sts:AssumeRole"],
-            "Resource": ["arn:aws:iam::\($account):role/\($rolename)"]
-        },
-        {
-            "Effect": "Allow",
-            "Action": ["s3:PutObject"],
-            "Resource": ["arn:aws:s3:::\($bucket)/*"]
-        }
-    ]
-}')
-
-# Create permission set
 PERMISSION_SET_ARN=$(aws sso-admin create-permission-set \
     --instance-arn $INSTANCE_ARN \
     --name $PERMISSION_SET_NAME \
     --output text --query 'PermissionSet.PermissionSetArn')
 
-# Attach inline policy
 aws sso-admin put-inline-policy-to-permission-set \
     --instance-arn $INSTANCE_ARN \
     --permission-set-arn $PERMISSION_SET_ARN \
-    --inline-policy "$POLICY_DOC"
+    --inline-policy '{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": ["sts:AssumeRole"],
+            "Resource": ["arn:aws:iam::'"$AccountB_ID"':role/'"$CROSS_ACCOUNT_ROLE_NAME"'"]
+        }
+    ]
+}'
 
 echo "Permission set ARN: $PERMISSION_SET_ARN"
 
-    # Assign to users/groups (example for group)
-GROUP_ID=$ADMINS_GROUP_ID  # From Identity Center groups list
+# Assign permission set to destination account and admins group
 aws sso-admin create-account-assignment \
     --instance-arn $INSTANCE_ARN \
-    --target-id $AccountA_ID \
+    --target-id $AccountB_ID \
     --target-type AWS_ACCOUNT \
     --permission-set-arn $PERMISSION_SET_ARN \
     --principal-type GROUP \
-    --principal-id $GROUP_ID
+    --principal-id $ADMINS_GROUP_ID
 
-# verify 
+# Verify assignment
 aws sso-admin list-account-assignments \
     --instance-arn $INSTANCE_ARN \
-    --account-id $AccountA_ID \
+    --account-id $AccountB_ID \
     --permission-set-arn $PERMISSION_SET_ARN \
-    --query "AccountAssignments[?PrincipalId=='$GROUP_ID']" \
+    --query "AccountAssignments[?PrincipalId=='$ADMINS_GROUP_ID']" \
     --output table
 
 aws sts get-caller-identity
 ```
+
+# test sign in as user with the new Identity Center permission
+``` bash
+export AWS_PROFILE=$DEST_CROSS_ACCOUNT
+aws sso login 
+
+aws sts get-caller-identity
+```
+
+# Create IAM Role for Cross Account Access in Source Account
+# Source Account IAM Role
+``` bash
+export AWS_PROFILE=$DESTINATION_ACCOUNT
+aws sso login 
+
+# Create IAM role with trust policy
+aws cloudformation deploy \
+  --template-file iam-role-s3-cross-account-template.yaml \
+  --stack-name crossAccountS3IamRole \
+  --region ap-southeast-2 \
+  --parameter-overrides \
+    IamRoleName=$CROSS_ACCOUNT_ROLE_NAME \
+    DestinationAccountId=$AccountB_ID \
+    SourceBucketName=$SOURCE_BUCKET_NAME \
+    DestinationBucketName=$DEST_BUCKET_NAME \
+    KMSKeyArnSource=$SOURCE_BUCKET_KMS_KEY_ARN \
+    KMSKeyArnDestination=$DEST_BUCKET_KMS_KEY_ARN \
+  --capabilities CAPABILITY_NAMED_IAM
+
+CROSS_ACCOUNT_ROLE_ARN=$(aws cloudformation describe-stacks \
+    --stack-name crossAccountS3IamRole \
+    --region ap-southeast-2 \
+    --query "Stacks[0].Outputs[?OutputKey=='CrossAccountS3CopyRoleArn'].OutputValue" \
+    --output text)
+
+# Check role properties
+aws iam get-role --role-name "$CROSS_ACCOUNT_ROLE_NAME"
+
+# Verify attached policies
+aws iam list-role-policies --role-name "$CROSS_ACCOUNT_ROLE_NAME"
+```
+
+# Perform the cross-account S3 copy
+``` bash
+export AWS_PROFILE=$DEST_CROSS_ACCOUNT
+aws sso login
+aws sts get-caller-identity
+# Assume the role
+CREDENTIALS=$(aws sts assume-role --role-arn "arn:aws:iam::${AccountB_ID}:role/${CROSS_ACCOUNT_ROLE_NAME}" --role-session-name CrossAccountCopy)
+
+aws sts get-caller-identity
+
+export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | jq -r .Credentials.AccessKeyId)
+export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | jq -r .Credentials.SecretAccessKey)
+export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | jq -r .Credentials.SessionToken)
+
+aws sts get-caller-identity
+
+# Perform the S3 copy
+aws s3 cp s3://$SOURCE_BUCKET_NAME s3://$DEST_BUCKET_NAME
+```
+# Error
+You will get error 
+```bash
+fatal error: An error occurred (AccessDenied) when calling the ListObjectsV2 operation: Access Denied
+
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+```
+This is because the source account bucket policy needs to be updated to allow the desination account access to the source bucket
+
+# update source account bucket policy and kms permission
+```bash
+export AWS_PROFILE=$SOURCE_ACCOUNT
+aws sso login 
+
+aws cloudformation deploy \
+  --template-file s3-source-template-updated-bucket-policy.yaml \
+  --stack-name sources3 \
+  --region ap-southeast-2 \
+  --parameter-overrides BucketNamePrefix=mysourcebucket CrossAccountRoleArn=$CROSS_ACCOUNT_ROLE_ARN \
+  --capabilities CAPABILITY_NAMED_IAM
+```
+
+# Assume cross account role 
+```bash
+export AWS_PROFILE=$DEST_CROSS_ACCOUNT
+aws sso login
+aws sts get-caller-identity
+# Assume the role
+CREDENTIALS=$(aws sts assume-role --role-arn "arn:aws:iam::${AccountB_ID}:role/${CROSS_ACCOUNT_ROLE_NAME}" --role-session-name CrossAccountCopy)
+
+export AWS_ACCESS_KEY_ID=$(echo $CREDENTIALS | jq -r .Credentials.AccessKeyId)
+export AWS_SECRET_ACCESS_KEY=$(echo $CREDENTIALS | jq -r .Credentials.SecretAccessKey)
+export AWS_SESSION_TOKEN=$(echo $CREDENTIALS | jq -r .Credentials.SessionToken)
+
+aws sts get-caller-identity
+# Perform copy using destination role
+aws s3 cp s3://$SOURCE_BUCKET_NAME/ s3://$DEST_BUCKET_NAME/ \
+    --recursive
+```
+
+# Clean up
+``` bash
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+# Permission set
+export AWS_PROFILE=$MANAGEMENT_ACCOUNT
+aws sso login
+# 1. Remove the account assignment
+aws sso-admin delete-account-assignment \
+    --instance-arn $INSTANCE_ARN \
+    --target-id $AccountB_ID \
+    --target-type AWS_ACCOUNT \
+    --permission-set-arn $PERMISSION_SET_ARN \
+    --principal-type GROUP \
+    --principal-id $ADMINS_GROUP_ID
+
+# 2. Delete the permission set
+aws sso-admin delete-permission-set \
+    --instance-arn $INSTANCE_ARN \
+    --permission-set-arn $PERMISSION_SET_ARN
+
+# Delete Cross Account S3 Copy IAM role
+export AWS_PROFILE=$DESTINATION_ACCOUNT
+aws sso login 
+
+aws cloudformation delete-stack --stack-name crossAccountS3IamRole --region ap-southeast-2
+
+# delete s3 buckets
+aws cloudformation delete-stack --stack-name destinations3 --region ap-southeast-2
+
+export AWS_PROFILE=$SOURCE_ACCOUNT
+aws sso login 
+aws s3 rm s3://$SOURCE_BUCKET_NAME --recursive
+aws cloudformation delete-stack --stack-name sources3 --region ap-southeast-2
+```
+
