@@ -5,9 +5,6 @@ Parameters:
   IamRoleName:
     Type: String
     Description: IAM Role Name
-  DestinationAccountId:
-    Type: String
-    Description: AWS Account ID of the destination account
   SourceBucketName:
     Type: String
     Description: Name of the source S3 bucket
@@ -31,7 +28,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${DestinationAccountId}:root'
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
             Action: sts:AssumeRole
       Policies:
         - PolicyName: CrossAccountS3CopyPolicy

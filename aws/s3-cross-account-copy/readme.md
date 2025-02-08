@@ -128,7 +128,6 @@ aws cloudformation deploy \
   --region $AWS_REGION \
   --parameter-overrides \
     IamRoleName=$CROSS_ACCOUNT_ROLE_NAME \
-    DestinationAccountId=$AccountB_ID \
     SourceBucketName=$SOURCE_BUCKET_NAME \
     DestinationBucketName=$DEST_BUCKET_NAME \
     KMSKeyArnSource=$SOURCE_BUCKET_KMS_KEY_ARN \
