@@ -115,7 +115,7 @@ aws sso login
 aws sts get-caller-identity
 ```
 
-# Create IAM Role for Cross Account Access in Source Account
+# Create IAM Role for Cross Account Access to the Source Account
 # Source Account IAM Role
 ``` bash
 export AWS_PROFILE=$DESTINATION_ACCOUNT
