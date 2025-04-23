@@ -1,6 +1,6 @@
 # Log Analysis System
 
-A simple but powerful log analysis tool.
+A simple log analysis tool.
 
 ## Overview
 
@@ -85,7 +85,3 @@ To run a demonstration with automatically generated logs:
 
 1. Enhance the `suggest_solutions` function in `analyze_logs.py`
 2. Add new pattern matching logic for different types of issues
-
-## License
-
-MIT 
