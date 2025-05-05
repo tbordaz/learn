@@ -50,3 +50,4 @@ analysis_results_*.txt
 !log_analysis_system/output/.gitkeep 
 
 .ignore/
+.ignore-old/
