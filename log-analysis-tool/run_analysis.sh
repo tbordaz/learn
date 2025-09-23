@@ -12,6 +12,7 @@ display_help() {
     echo "  -o, --output FILE  Output file for results in JSON format"
     echo "  -v, --verbose      Enable verbose output"
     echo "  --disable-ai       Disable AI enhancement"
+    echo "  --solution-len     Specify the maximum lenght of the solution (default: 10)"
     echo "  --model MODEL      Specify Ollama model to use (default: llama3.2)"
     echo "  --timeout SECONDS  Set timeout for Ollama API requests in seconds (default: 300)"
     echo "  --debug            Enable debug output"
@@ -39,6 +40,7 @@ SEARCH_TERM="error"
 OUTPUT=""
 VERBOSE=""
 DISABLE_AI=""
+SOLUTION_LEN="10"
 DEBUG_FLAG=""
 OLLAMA_MODEL=${OLLAMA_MODEL:-"llama3.2"}  # Default to llama3.2 or use env var if set
 OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-"300"}   # Default timeout is 300 seconds (5 minutes)
@@ -65,6 +67,10 @@ while [[ $# -gt 0 ]]; do
         --disable-ai)
             DISABLE_AI="--disable-ai"
             shift
+            ;;
+        --solution-len)
+            SOLUTION_LEN="--solution-len $2"
+            shift; shift
             ;;
         --model)
             OLLAMA_MODEL="$2"
@@ -119,7 +125,7 @@ fi
 
 # Run the script
 echo "Running Log Analysis..."
-echo "Command: ./analyze_logs.py --logs \"$LOGS_DIR\" --term \"$SEARCH_TERM\" $OUTPUT $VERBOSE $DISABLE_AI $DEBUG_FLAG"
-./analyze_logs.py --logs "$LOGS_DIR" --term "$SEARCH_TERM" $OUTPUT $VERBOSE $DISABLE_AI $DEBUG_FLAG
+echo "Command: ./analyze_logs.py --logs \"$LOGS_DIR\" --term \"$SEARCH_TERM\" $OUTPUT $VERBOSE $DISABLE_AI $SOLUTION_LEN $DEBUG_FLAG"
+./analyze_logs.py --logs "$LOGS_DIR" --term "$SEARCH_TERM" $OUTPUT $VERBOSE $DISABLE_AI $SOLUTION_LEN $DEBUG_FLAG
 
 echo "Analysis complete." 

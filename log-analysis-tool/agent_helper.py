@@ -1,6 +1,7 @@
 from smolagents import CodeAgent
 from smolagents import tool
 import os
+import pdb
 import requests
 import json
 from dotenv import load_dotenv
@@ -193,15 +194,16 @@ def get_available_ollama_models(api_base=None):
         return ["llama3.2", "llama3.1", "deepseek-r1"]
 
 # Simple function version
-def enhance_solution_direct(model, problem, solution, log_examples):
+def enhance_solution_direct(model, problem, solution, root_cause, further_investigations):
     """Direct implementation of solution enhancement without using the agent framework"""
-    log_examples_text = "\n".join(log_examples) if log_examples else "No log examples available"
+    #log_examples_text = "\n".join(log_examples) if log_examples else "No log examples available"
     
     # Create a more concise prompt to reduce token usage
     prompt = f"""Enhance this log analysis solution:
 Problem: {problem}
 Basic solution: {solution}
-Log examples: {log_examples_text}
+Root cause: {root_cause}
+Further investigations: {further_investigations}
 
 Provide a detailed explanation and specific steps to resolve the issue."""
     
@@ -221,7 +223,7 @@ Provide a detailed explanation and specific steps to resolve the issue."""
         
         # Debug output to see the enhanced solution
         if os.getenv("DEBUG") == "1":
-            print(f"\nEnhanced solution for {problem}:\n{enhanced_solution[:100]}...\n")
+            print(f"\nEnhanced solution for {problem}:\n{enhanced_solution[:1000]}...\n")
             print(f"Enhanced solution length: {len(enhanced_solution)} characters")
             
         # Check if result is empty or very short
@@ -229,6 +231,7 @@ Provide a detailed explanation and specific steps to resolve the issue."""
             print(f"⚠️ Warning: Enhanced solution for '{problem}' is too short or empty. Using original solution.")
             return solution
             
+        #pdb.set_trace()
         return enhanced_solution
     except TimeoutError as e:
         print(f"⚠️ Timeout error enhancing solution for '{problem}': {e}")
@@ -317,12 +320,13 @@ def enhance_solutions(analysis_results):
                     patterns.append(pattern.get("pattern", ""))
             
             # Only use the first 3 patterns to keep prompt size reasonable
-            log_examples = patterns[:3]
+            root_cause = analysis_results.get("root cause", [])
+            further_investigations = analysis_results.get("further investigations", [])
             
             print(f"⚙️ Enhancing solution for: {problem}")
             
             # First attempt with normal parameters
-            enhanced_solution_text = enhance_solution_direct(model, problem, basic_solution, log_examples)
+            enhanced_solution_text = enhance_solution_direct(model, problem, basic_solution, root_cause, further_investigations)
             
             # Check if the enhancement succeeded
             if enhanced_solution_text == basic_solution:
