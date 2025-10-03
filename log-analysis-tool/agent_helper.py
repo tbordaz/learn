@@ -205,7 +205,8 @@ Basic solution: {solution}
 Root cause: {root_cause}
 Further investigations: {further_investigations}
 
-Provide a detailed explanation and specific steps to resolve the issue."""
+Provide a detailed explanation of proposed solution and root caues. Also describe specific steps to resolve the issue for which you may inspirate yourself from the suggested investigations."""
+#Provide a detailed explanation and specific steps to resolve the issue."""
     
     try:
         # Debug output to see the generated content

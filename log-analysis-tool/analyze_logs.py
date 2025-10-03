@@ -467,13 +467,13 @@ def suggest_solutions(analysis):
                 'further investigations': 'Compare the long operations (etime) with similar operations before/after to confirm if they were also long. Check if an update (ADD/DEL/MODRDN/MOD) was started before that event and complete around the same time that the others requests returned their result. Check if the unresponsiveness was transient or if was a kind of fatal deadlock. Need to collect `top -H` and periodic `pstack`. Check, with cn=monitor, if there was a spike of connections hitting the maximum threads per connection (default is 5). Check if the abandonned operations (likely the ones before abandonned) was waiting for long in the waiting queue (wtime) or were slow to proceed (etime).'
                 }
         if str(event["severity"]) == "fatal":
-            global_desc['problem'] = 'Around %s clients massively abandonned requests that were arleady processed.' % event["timematch"]
+            global_desc['problem'] = 'Around %s clients massively abandonned requests that were already processed.' % event["timematch"]
         else:
             if event["severity"] == "critical":
-                global_desc['problem'] = 'Around %s several clients abandonned requests that were arleady processed.' % event["timematch"]
+                global_desc['problem'] = 'Around %s several clients abandonned requests that were already processed.' % event["timematch"]
             else:
                 if event["severity"] == "warning":
-                    global_desc['problem'] = 'Around %s few clients abandonned requests that were arleady processed.' % event["timematch"]
+                    global_desc['problem'] = 'Around %s few clients abandonned requests that were already processed.' % event["timematch"]
         solutions.append(global_desc)
 
     for event in abandon_high_etime["event_abandon_high_etime"]:
@@ -708,14 +708,28 @@ def main():
                 # Only display the first 3-4 lines of the enhanced solution to keep it concise
                 # Split by newlines and filter out empty lines
                 solution_lines = [line for line in solution_text.split('\n') if line.strip()]
-                solution_len = int(args.solution_len)
+                if (args.solution_len):
+                    solution_len = int(args.solution_len)
+                else:
+                    solution_len = 10
                 if len(solution_lines) > solution_len:
                     # Display first 10 lines if the solution is very long
                     display_solution = '\n     '.join(solution_lines[:solution_len]) + '\n     ...'
                 else:
                     display_solution = '\n     '.join(solution_lines)
                 
-                print(f"     {display_solution}")
+                if solution.get('ai_enhanced', False):
+                    print(f"     {display_solution}")
+                else:
+                    print(f"\n     {display_solution}")
+                
+                root_cause = solution.get('root cause', '')
+                if not solution.get('ai_enhanced', False):
+                    print(f"\n     Root Cause: {root_cause}")
+
+                further_investigations = solution.get('further investigations', '')
+                if not solution.get('ai_enhanced', False):
+                    print(f"\n     Further Investigations: {further_investigations}")
                 
                 # Add a line break for readability
                 if i < len(ai_enhanced_solutions):
